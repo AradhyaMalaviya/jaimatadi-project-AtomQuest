@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+enum GoalSheetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
+enum Quarter {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  ON_TRACK
+  COMPLETED
+}
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  role        Role     @default(EMPLOYEE)
+  department  String?
+  managerId   String?
+  manager     User?    @relation("UserToManager", fields: [managerId], references: [id])
+  reports     User[]   @relation("UserToManager")
+  
+  goalSheets  GoalSheet[]
+  auditEvents AuditEvent[] @relation("Actor")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GoalSheet {
+  id              String          @id @default(uuid())
+  employeeId      String
+  employee        User            @relation(fields: [employeeId], references: [id])
+  cycle           String          // e.g., "2024"
+  status          GoalSheetStatus @default(DRAFT)
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  managerFeedback String?
+
+  goals           Goal[]
+  checkIns        CheckIn[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([employeeId, cycle])
+}
+
+model Goal {
+  id             String    @id @default(uuid())
+  sheetId        String
+  sheet          GoalSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  
+  title          String
+  description    String?
+  thrustArea     String
+  uom            String    // Numeric, Percentage, Timeline, Zero-based
+  baseline       Float?
+  target         String
+  weightage      Float
+  isShared       Boolean   @default(false)
+  isLowerBetter  Boolean   @default(false)
+
+  achievements   Achievement[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model CheckIn {
+  id             String    @id @default(uuid())
+  sheetId        String
+  sheet          GoalSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  
+  quarter        Quarter
+  managerComment String?
+  isSubmitted    Boolean   @default(false)
+  submittedAt    DateTime?
+
+  achievements   Achievement[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([sheetId, quarter])
+}
+
+model Achievement {
+  id                   String         @id @default(uuid())
+  checkInId            String
+  checkIn              CheckIn        @relation(fields: [checkInId], references: [id], onDelete: Cascade)
+  goalId               String
+  goal                 Goal           @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  actual               String?
+  status               ProgressStatus @default(NOT_STARTED)
+  overrideScore        Float?
+  overrideJustification String?
+
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@unique([checkInId, goalId])
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  action    String   // SUBMIT, RETURN, APPROVE, EDIT, UNLOCK, CHECK_IN, CHECK_IN_REVIEW, EXPORT
+  actorId   String
+  actor     User     @relation("Actor", fields: [actorId], references: [id])
+  targetId  String?  // ID of the goal sheet or user affected
+  details   Json?    // Stores what changed
+}

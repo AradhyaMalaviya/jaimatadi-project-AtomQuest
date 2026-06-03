@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://atomquest:atomquest@localhost:5432/atomquest?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret-value-with-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-value-with-32-characters
+      ALLOWED_ORIGINS: http://localhost:5173
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Validate Prisma schema
+        run: npm run prisma:validate --prefix backend
+
+      - name: Build backend
+        run: npm run build --prefix backend
+
+      - name: Test backend
+        run: npm test --prefix backend
+
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
